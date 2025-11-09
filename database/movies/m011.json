@@ -1,0 +1,20 @@
+{
+    "id": 11,
+    "name": "Dune: Part Two",
+    "languages": [
+        "English",
+        "Hindi"
+    ],
+    "actors": [
+        "Timoth\u00e9e Chalamet",
+        "Zendaya",
+        "Rebecca Ferguson"
+    ],
+    "genre": [
+        "Sci-Fi",
+        "Adventure"
+    ],
+    "producer_id": "denisVilleneuve",
+    "duration": 9960,
+    "cover_image": "utils\\movie_covers\\Dune: Part Two.jpg"
+}

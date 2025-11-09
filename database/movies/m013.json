@@ -1,0 +1,22 @@
+{
+    "id": 13,
+    "name": "Kantara",
+    "languages": [
+        "Kannada",
+        "Hindi",
+        "Tamil",
+        "Telugu"
+    ],
+    "actors": [
+        "Rishab Shetty",
+        "Sapthami Gowda",
+        "Kishore Kumar G."
+    ],
+    "genre": [
+        "Action",
+        "Drama"
+    ],
+    "producer_id": "vijayKiragandur",
+    "duration": 8880,
+    "cover_image": "utils\\movie_covers\\Kantara.jpg"
+}

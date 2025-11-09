@@ -1,0 +1,226 @@
+[
+  {
+    "theatre_id": 1,
+    "theatre_name": "PVR Phoenix",
+    "city": "mumbai",
+    "3d": true,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 2,
+    "theatre_name": "INOX Palladium",
+    "city": "mumbai",
+    "3d": true,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 3,
+    "theatre_name": "Cinepolis Andheri",
+    "city": "mumbai",
+    "3d": false,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 4,
+    "theatre_name": "Carnival Cinemas",
+    "city": "mumbai",
+    "3d": false,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 5,
+    "theatre_name": "City Pride",
+    "city": "nashik",
+    "3d": true,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 6,
+    "theatre_name": "Z Square Mall",
+    "city": "nashik",
+    "3d": true,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 7,
+    "theatre_name": "Inorbit Mall",
+    "city": "nashik",
+    "3d": false,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 8,
+    "theatre_name": "Apsara Theatre",
+    "city": "nashik",
+    "3d": false,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 9,
+    "theatre_name": "INOX Bund Garden",
+    "city": "pune",
+    "3d": true,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 10,
+    "theatre_name": "PVR Pavilion",
+    "city": "pune",
+    "3d": true,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 11,
+    "theatre_name": "E-Square Cinemas",
+    "city": "pune",
+    "3d": false,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 12,
+    "theatre_name": "Seasons Mall",
+    "city": "pune",
+    "3d": false,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 13,
+    "theatre_name": "PVR Forum",
+    "city": "bangalore",
+    "3d": true,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 14,
+    "theatre_name": "INOX Garuda",
+    "city": "bangalore",
+    "3d": true,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 15,
+    "theatre_name": "Cinepolis Royal",
+    "city": "bangalore",
+    "3d": false,
+    "imax": true,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  },
+  {
+    "theatre_id": 16,
+    "theatre_name": "Mantri Square",
+    "city": "bangalore",
+    "3d": false,
+    "imax": false,
+    "films_running": [
+      1,
+      5,
+      10,
+      13,
+      15
+    ]
+  }
+]

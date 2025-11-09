@@ -1,0 +1,351 @@
+THEATRE BOOKING MANAGEMENT SYSTEM (PaaS)
+
+------------------------------------------------------------------
+PROJECT ENVIRONMENT SETUP
+------------------------------------------------------------------
+
+- The AI must refer to the folder named 'database' (stored in the same directory as this prompt.txt file) for database structure inspiration.
+- The 'database' folder contains reference or legacy schema files and tables for guidance.
+- The AI can redevelop or modify the database schema as needed, using those files only as conceptual input.
+- The final system must create and manage its own database file inside the folder named 'pqr-entertainment'.
+
+Directory Structure:
+- Root folder (contains all):
+  - database/
+  - pqr-entertainment/
+  - prompt.txt
+
+- All project files, code modules, assets, database files, and supporting scripts must be created inside the 'pqr-entertainment' folder only.
+- The main Python file must be 'main.py' located inside the 'pqr-entertainment' folder.
+- The project must not read or write outside 'pqr-entertainment', except to reference the database folder for inspiration during development.
+
+------------------------------------------------------------------
+OVERVIEW
+------------------------------------------------------------------
+
+Goal:
+Build a Python GUI-based Theatre Booking Management System for PQR Entertainment as a Platform-as-a-Service (PaaS) desktop application.
+The app is not a web browser app — it must be packaged later into a desktop executable (e.g., via PyInstaller or cx_Freeze).
+
+All code must follow:
+- snake_case naming only for files, variables, functions, and classes.
+- Tkinter or PyQt may be used for the GUI.
+- Single window application (main.py handles all pages and transitions).
+
+------------------------------------------------------------------
+APP STARTUP AND ARCHITECTURE
+------------------------------------------------------------------
+
+- The app always starts at the shared login page.
+- main.py initializes the main window and loads the login page first.
+- Page transitions are handled by:
+  - Removing all widgets from the current container.
+  - Loading widgets of the next page into the same window.
+- Each page reloads fresh data from the datastore whenever loaded.
+
+Packaging Plan (as comments in code):
+- Plan for PyInstaller / cx_Freeze packaging.
+- Include note on entry points and requirements for .exe generation.
+
+------------------------------------------------------------------
+DATASTORE (SQLite recommended)
+------------------------------------------------------------------
+
+Local SQLite database with tables for:
+
+users(user_id, username, password, role, name, email, balance)
+producers(producer_id, user_id, name, details)
+movies(movie_id, producer_id, title, description, actors_json, languages_json, duration_seconds, viewer_rating, cover_image_path, genres_json, average_rating)
+events(event_id, host_id, title, description, performers_json, venue, duration_seconds, date, time, average_rating)
+theatres(theatre_id, city, name, seating_schema_json)
+scheduled_screens(screen_id, theatre_id, movie_id/event_id, start_time, end_time, seat_map_json, price)
+bookings(booking_id, user_id, screen_id, seats_json, amount, status, refunded_flag)
+employees(employee_id, name, designation, salary, city, theatre)
+feedbacks(feedback_id, user_id, text, timestamp, read_flag)
+
+- Store and update wallet balance in users.balance.
+- Include data conversion logic (e.g. HH:MM:SS to seconds, comma-separated to lists).
+- Add comments describing how to switch to a remote backend (Supabase/REST) later.
+- Database file must be created and managed inside pqr-entertainment/database/ or pqr-entertainment/local_data/ subfolder.
+
+------------------------------------------------------------------
+AUTHENTICATION SYSTEM
+------------------------------------------------------------------
+
+- Shared login page for Admin, Producer/Host, and User.
+- Only one Admin account (predefined credentials).
+- Registration options:
+  - Register as User
+  - Register as Producer/Host
+- Credentials stored in SQLite — no hashing required for this version.
+
+Role Permissions:
+- User: browse/book tickets, feedback, view booking history, manage watchlist, wallet.
+- Producer/Host: upload and manage movies/shows/events, view analytics.
+- Admin: full management and analytics access.
+- No user can access upload controls; no producer can book tickets.
+
+------------------------------------------------------------------
+NAVIGATION SYSTEM
+------------------------------------------------------------------
+
+- Navigation stack (admin_stack, producer_stack, user_stack) stores visited pages.
+- Includes Forward, Backward, and Refresh buttons on every non-login page.
+- Each stack records even repeated visits (not deduplicated).
+- On logout, the corresponding stack is cleared.
+
+------------------------------------------------------------------
+MENU SYSTEM
+------------------------------------------------------------------
+
+- Collapsible overlay menu toggled via hamburger icon.
+- Can be closed by:
+  - Clicking the icon again,
+  - Clicking a close icon,
+  - Clicking outside (optional).
+- Does not destroy underlying page state.
+- Menu overlays current content and toggles icon between hamburger/close.
+
+------------------------------------------------------------------
+USER MODULE (Expanded)
+------------------------------------------------------------------
+
+User Profile Page:
+- Displays username and buttons:
+  - Update Username
+  - Update Password
+  - Booking History
+  - My Bookings
+  - Watchlist
+  - Wallet
+- Clicking Update Username or Update Password opens a popup form.
+
+Update Username:
+- Enter new username, click update.
+- If username already exists, show "Username taken".
+
+Update Password:
+- Enter old password, new password, confirm new password.
+- Old password must match current.
+- New password must not match old password.
+- Display validation errors for invalid inputs.
+
+Validation checks apply both during signup and updates.
+
+------------------------------------------------------------------
+WALLET FEATURE
+------------------------------------------------------------------
+
+- "Wallet" button opens popup showing:
+  - Current balance.
+  - "Add Balance" button (increments balance manually for now).
+- Balance starts at zero for all users.
+- Two demo users provided with zero balance.
+- When booking tickets:
+  - Ticket amount is deducted.
+  - If insufficient balance, show message: "Can’t book, you’re broke."
+
+------------------------------------------------------------------
+WATCHLIST SYSTEM
+------------------------------------------------------------------
+
+- Each movie/event/show page includes an "Add to Watchlist" button.
+  - Changes to "Remove from Watchlist" when added.
+- Watchlist entries stored per user in datastore.
+- Watchlist Page:
+  - Table listing names of all added movies/events.
+  - Two buttons per item:
+    - Visit (opens detail page)
+    - Remove (removes from watchlist)
+
+------------------------------------------------------------------
+BOOKING AND HISTORY
+------------------------------------------------------------------
+
+Booking Flow:
+1. Clicking on a movie/show card opens popup asking user to choose city:
+   - Mumbai
+   - Pune
+   - Nashik
+   - Bangalore
+2. App then shows theatres in that city screening that movie/show.
+   - Only shows listings for today and next 3 days.
+3. Each theatre name expands to dropdown list of scheduled screens with date/time.
+4. Selecting one opens a page displaying:
+   - Seat matrix (10x10) below a visual screen/stage label.
+   - Booked seats = grey, Available = white, Selected = highlighted.
+5. Seat sections:
+   - Cinema halls:
+     - Economy (bottom 3 rows)
+     - Central (middle 4)
+     - Recliner (top 3)
+   - Theatre/Stage halls:
+     - Economy (top 3)
+     - Central (middle 4)
+     - Premium (last 3)
+   - Rows named A–J (bottom to top).
+   - Columns 1–10 (left to right).
+   - Prices differ per section.
+
+Booking Confirmation:
+- On selecting multiple seats, multiple entries appear in booking table.
+- If funds insufficient, block booking with message.
+
+Cities:
+- Mumbai
+- Pune
+- Nashik
+- Bangalore
+
+Each City:
+- 4 Cinema halls (with screens)
+- 1 Theatre/Stage hall (for shows/events)
+- Each hall: 5 screens
+- Each screen: 100 seats (10x10)
+
+Booking History Page:
+- Displays a table with:
+  - Movie/Event name
+  - Date
+  - Time
+  - City
+  - Theatre name
+  - Screen number
+  - Seat number
+
+------------------------------------------------------------------
+USER HOMEPAGE STRUCTURE
+------------------------------------------------------------------
+
+- Header:
+  - Hamburger menu (toggles overlay)
+  - Search bar (by title)
+  - Genre filter dropdown
+  - Username dropdown (Logout)
+- Menu Overlay:
+  - My Profile
+  - My Bookings
+  - Booking History
+  - Watchlist
+  - Wallet
+  - Feedback (text box → stores feedback)
+  - Customer Service (shows customerservice@pqrentertainment.com)
+  - Logout
+
+Banner Section:
+- Two rotating featured film/event cards (left and right).
+- Each card: shrunk cover image (~3/8 of size), title, rating.
+- Clickable, opens detail page.
+- Timing:
+  - Left card: first 5 sec, then 10 sec per rotation.
+  - Right card: 10 sec from start.
+- Cycles through featured movies/events.
+
+Movie Cards Section:
+- Grid of movie cards (4 per row).
+- Each shows cover image, title, rating.
+- Clickable to open detail page.
+
+Testimonials:
+- 10 fictional positive testimonials (3 shown at once, rotate every 10s).
+
+Footer:
+- "Contact Us" with contact@pqrentertainment.com.
+
+------------------------------------------------------------------
+PRODUCER / SHOW HOST MODULE
+------------------------------------------------------------------
+
+- Common layout for both; producer handles movies, hosts handle events.
+
+Dashboard:
+- Displays uploaded movies/events as searchable grid of cards.
+- Card shows cover image, title, avg rating.
+- Searchable by title, language, genre, rating, duration, upload date.
+
+Movie Detail Page:
+- Left: image + buttons (Edit, Delete).
+- Right: details (title, description, actors, languages, duration, rating).
+- Producers can only edit their own movies.
+
+Add/Edit Movie Page:
+- Fields: cover image, title, description, actors, languages, duration, rating, genres.
+- Fields validated; unfilled optional for edit.
+- Missing image → write entry to provide-these.txt.
+
+Analytics Page:
+- Bar: ticket sales per movie.
+- Line: weekly/monthly trends.
+- Donut: genre/language distribution.
+- Semicircular donut: average occupancy percentage.
+- Filters: date range, specific movie.
+
+------------------------------------------------------------------
+ADMIN MODULE
+------------------------------------------------------------------
+
+Header:
+- Username dropdown: Visit Profile / Logout.
+- Search bar with filters.
+- Welcome message.
+- Hamburger menu.
+
+Pages:
+1. Admin Profile
+2. Cinema Halls – group by city, add/edit/remove.
+3. Theatres – similar to cinema halls.
+4. Movies – discontinue films (unschedule).
+5. Shows/Events – remove events.
+6. Employees – manage staff records.
+7. Producers / Hosts – tie/untie, add/remove.
+8. Screen Manager – view, reschedule, unschedule.
+9. Analytics Page:
+   - Bar, Line, Donut, Semicircular Donut charts (matplotlib).
+   - Semicircle arc shows occupancy percentage ((p/100)*180 degrees).
+10. Feedback Page:
+    - Shows 10 latest unread reviews.
+    - "Mark as Read" removes entry from unread list.
+    - Load more option.
+
+------------------------------------------------------------------
+ASSET MANAGEMENT
+------------------------------------------------------------------
+
+- Whenever any asset is needed:
+  - Write filename + short description in provide-these.txt.
+  - Example:
+    inception.jpg - cover image for movie Inception
+- Store all assets inside an assets/ folder.
+- If missing, GUI shows placeholder gracefully.
+- provide-these.txt is the single source of truth for required files.
+- If image aspect ratio mismatches:
+  - Use Pillow (PIL) or any library to adjust ratio dynamically before display.
+
+------------------------------------------------------------------
+COMMON FEATURES
+------------------------------------------------------------------
+
+- Search and filter options on all major pages.
+- Refresh UI after each datastore update.
+- Form validation and helpful messages.
+- Consistent header/footer.
+- Role-based control visibility.
+- Responsive layouts.
+
+------------------------------------------------------------------
+PACKAGING PLAN (README NOTES)
+------------------------------------------------------------------
+
+To create an executable:
+pyinstaller --onefile --noconsole main.py
+
+or use cx_Freeze setup script.
+
+Include:
+- Required assets in /assets/
+- Database (.db file) and provide-these.txt
+- Add notes for code signing and cross-platform installer generation.
+
+------------------------------------------------------------------
+END OF PROMPT
+------------------------------------------------------------------

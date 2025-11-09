@@ -1,0 +1,20 @@
+{
+    "id": 15,
+    "name": "The Godfather",
+    "languages": [
+        "English",
+        "Hindi"
+    ],
+    "actors": [
+        "Marlon Brando",
+        "Al Pacino",
+        "James Caan"
+    ],
+    "genre": [
+        "Crime",
+        "Drama"
+    ],
+    "producer_id": "francisFordCoppola",
+    "duration": 10500,
+    "cover_image": "utils\\movie_covers\\The Godfather.jpg"
+}

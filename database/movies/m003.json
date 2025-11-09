@@ -1,0 +1,20 @@
+{
+    "id": 3,
+    "name": "The Prestige",
+    "languages": [
+        "English",
+        "Hindi"
+    ],
+    "actors": [
+        "Christian Bale",
+        "Hugh Jackman",
+        "Scarlett Johansson"
+    ],
+    "genre": [
+        "Mystery",
+        "Drama"
+    ],
+    "producer_id": "christopherNolan",
+    "duration": 7800,
+    "cover_image": "utils\\movie_covers\\The Prestige.jpg"
+}

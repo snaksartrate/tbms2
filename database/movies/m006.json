@@ -1,0 +1,20 @@
+{
+    "id": 6,
+    "name": "The Dark Knight Rises",
+    "languages": [
+        "English",
+        "Hindi"
+    ],
+    "actors": [
+        "Christian Bale",
+        "Tom Hardy",
+        "Anne Hathaway"
+    ],
+    "genre": [
+        "Action",
+        "Thriller"
+    ],
+    "producer_id": "christopherNolan",
+    "duration": 9900,
+    "cover_image": "utils\\movie_covers\\The Dark Knight Rises.jpg"
+}

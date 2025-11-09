@@ -1,0 +1,20 @@
+{
+    "id": 9,
+    "name": "Drishyam 2",
+    "languages": [
+        "Hindi",
+        "Malayalam"
+    ],
+    "actors": [
+        "Ajay Devgn",
+        "Tabu",
+        "Akshaye Khanna"
+    ],
+    "genre": [
+        "Crime",
+        "Thriller"
+    ],
+    "producer_id": "kumarMangat",
+    "duration": 8400,
+    "cover_image": "utils\\movie_covers\\Drishyam 2.jpg"
+}

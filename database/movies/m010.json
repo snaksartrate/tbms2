@@ -1,0 +1,20 @@
+{
+    "id": 10,
+    "name": "Dune",
+    "languages": [
+        "English",
+        "Hindi"
+    ],
+    "actors": [
+        "Timoth\u00e9e Chalamet",
+        "Rebecca Ferguson",
+        "Oscar Isaac"
+    ],
+    "genre": [
+        "Sci-Fi",
+        "Adventure"
+    ],
+    "producer_id": "denisVilleneuve",
+    "duration": 9300,
+    "cover_image": "utils\\movie_covers\\Dune.jpg"
+}
