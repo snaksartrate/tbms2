@@ -1,0 +1,24 @@
+
+# Movie Cover Images
+inception.jpg - Cover image for movie Inception
+the_dark_knight.jpg - Cover image for movie The Dark Knight
+interstellar.jpg - Cover image for movie Interstellar
+parasite.jpg - Cover image for movie Parasite
+avengers_endgame.jpg - Cover image for movie Avengers: Endgame
+joker.jpg - Cover image for movie Joker
+
+# Event Cover Images
+rock_night_live.jpg - Cover image for event Rock Night Live
+stand-up_comedy_night.jpg - Cover image for event Stand-Up Comedy Night
+
+# Movie Cover Images
+inception.jpg - Cover image for movie Inception
+the_dark_knight.jpg - Cover image for movie The Dark Knight
+interstellar.jpg - Cover image for movie Interstellar
+parasite.jpg - Cover image for movie Parasite
+avengers_endgame.jpg - Cover image for movie Avengers: Endgame
+joker.jpg - Cover image for movie Joker
+
+# Event Cover Images
+rock_night_live.jpg - Cover image for event Rock Night Live
+stand-up_comedy_night.jpg - Cover image for event Stand-Up Comedy Night
