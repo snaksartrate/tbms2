@@ -1,24 +1,23 @@
+# Asset Requirements for Theatre Booking Management System
+# Place all assets in pqr-entertainment/assets/ folder
 
 # Movie Cover Images
-inception.jpg - Cover image for movie Inception
-the_dark_knight.jpg - Cover image for movie The Dark Knight
-interstellar.jpg - Cover image for movie Interstellar
-parasite.jpg - Cover image for movie Parasite
-avengers_endgame.jpg - Cover image for movie Avengers: Endgame
-joker.jpg - Cover image for movie Joker
+Inception.jpg - Cover image for movie Inception
+Interstellar.jpg - Cover image for movie Interstellar
+The_Prestige.jpg - Cover image for movie The Prestige
+Batman_Begins.jpg - Cover image for movie Batman Begins
+The_Dark_Knight.jpg - Cover image for movie The Dark Knight
+The_Dark_Knight_Rises.jpg - Cover image for movie The Dark Knight Rises
+Drishyam.jpg - Cover image for movie Drishyam
+Drishyam_2.jpg - Cover image for movie Drishyam 2
+Dune.jpg - Cover image for movie Dune
+Dune_Part_Two.jpg - Cover image for movie Dune: Part Two
+Fight_Club.jpg - Cover image for movie Fight Club
+Kantara.jpg - Cover image for movie Kantara
+Memento.jpg - Cover image for movie Memento
+The_Godfather.jpg - Cover image for movie The Godfather
+Tenet.jpg - Cover image for movie Tenet
 
 # Event Cover Images
-rock_night_live.jpg - Cover image for event Rock Night Live
-stand-up_comedy_night.jpg - Cover image for event Stand-Up Comedy Night
-
-# Movie Cover Images
-inception.jpg - Cover image for movie Inception
-the_dark_knight.jpg - Cover image for movie The Dark Knight
-interstellar.jpg - Cover image for movie Interstellar
-parasite.jpg - Cover image for movie Parasite
-avengers_endgame.jpg - Cover image for movie Avengers: Endgame
-joker.jpg - Cover image for movie Joker
-
-# Event Cover Images
-rock_night_live.jpg - Cover image for event Rock Night Live
-stand-up_comedy_night.jpg - Cover image for event Stand-Up Comedy Night
+Rock_Night_Live.jpg - Cover image for event Rock Night Live
+Stand-Up_Comedy_Night.jpg - Cover image for event Stand-Up Comedy Night

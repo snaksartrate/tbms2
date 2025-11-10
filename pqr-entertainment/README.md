@@ -60,13 +60,36 @@ python main.py
 
 ```
 pqr-entertainment/
-├── main.py                    # Main application entry point
-├── database.py                # Database module (SQLite)
+├── main.py                    # Main application entry point, delegates to frontend modules
+├── database.py                # Low-level SQLite helper (legacy entry point)
+├── dbwrap.py                  # Thin wrapper; import DB as: from dbwrap import db
+├── backend/                   # Non-UI logic
+│   ├── __init__.py
+│   └── scheduling.py         # Conflict detection + suggestions for shows
+├── frontend/                  # UI pages grouped by role
+│   ├── __init__.py
+│   ├── assets.py             # Image loader (Pillow) + toasts
+│   ├── pages_admin.py        # Admin: Screen Manager, Feedback
+│   ├── pages_producer.py     # Producer: Dashboard, Analytics
+│   └── pages_user.py         # User: Home, Events, Booking, Wallet, Watchlist
 ├── populate_demo_data.py      # Demo data population script
 ├── tbms.db                    # SQLite database file (auto-created)
 ├── assets/                    # Asset folder for images
+├── provide-these.txt          # Asset requirements (3-line paragraphs)
 └── README.md                  # This file
 ```
+
+### Database Access
+
+New code should import the database via the wrapper to keep things swappable later:
+
+```python
+from dbwrap import db
+
+rows = db.execute_query("SELECT * FROM movies", fetch_all=True)
+```
+
+Legacy code may still have `import database as db`; both work today. The wrapper simplifies future migration to a remote backend.
 
 ---
 
@@ -173,6 +196,22 @@ python setup.py build
 - Include the `assets/` folder with the executable
 - The database file (`tbms.db`) will be created automatically
 - Ensure all required images are in the `assets/` folder (see `provide-these.txt`)
+
+---
+
+## Quick Smoke-Test Checklist
+
+1. Launch app: `python main.py`
+2. Login as demo user (e.g., `alice` / `password`).
+3. Home: Verify movies show, open a movie detail, add/remove watchlist.
+4. Events page: Open event detail, pick city → venue → seat selection.
+5. Wallet: Add ₹500, book 2–3 seats, verify wallet deduction and booking success.
+6. My Bookings: See upcoming booking; Booking History lists past bookings.
+7. Logout → Login as `producer1` / `password`:
+   - Dashboard: see movies/events, edit/delete; Analytics loads charts.
+8. Logout → Login as admin:
+   - Screen Manager: List shows by city/date; try reschedule (conflict prevents with suggestion); Unschedule refunds.
+   - Cinema Halls: Add/Edit/Delete; Feedback page: paginate and mark read.
 
 ---
 

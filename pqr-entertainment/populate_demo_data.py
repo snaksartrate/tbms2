@@ -3,9 +3,11 @@ Populate database with demo data for testing
 Run this script to add sample movies, events, theatres, and schedules
 """
 
-import database as db
+from dbwrap import db
 import json
 from datetime import datetime, timedelta
+import os
+import random
 
 def populate_theatres():
     """Populate theatres from database/cities/theatres/theatres.json"""
@@ -28,6 +30,24 @@ def populate_theatres():
         {"theatre_id": 15, "theatre_name": "Cinepolis Royal", "city": "Bangalore", "3d": False, "imax": True},
         {"theatre_id": 16, "theatre_name": "Mantri Square", "city": "Bangalore", "3d": False, "imax": False},
     ]
+    # Add one stage hall per city
+    stage_halls = [
+        ("Mumbai",  "Royal Opera House"),
+        ("Nashik",  "Kalidas Rangmandir"),
+        ("Pune",    "Tilak Smarak Mandir"),
+        ("Bangalore","Rangashankara"),
+    ]
+    for city, name in stage_halls:
+        schema = {
+            'screens': 5,
+            'seats_per_screen': 100,
+            '3d': False,
+            'imax': False,
+        }
+        db.execute_query(
+            "INSERT INTO theatres (city, name, hall_type, seating_schema_json) VALUES (?, ?, ?, ?)",
+            (city, name, 'stage', json.dumps(schema))
+        )
     
     for theatre in theatres_data:
         schema = {
@@ -142,18 +162,6 @@ def populate_demo_producer_and_movies():
             'genres': ['Action', 'Thriller'],
             'average_rating': 4.6,
             'producer_id': 'christopherNolan'
-        },
-        {
-            'id': 7,
-            'title': 'Tumhari Sulu',
-            'description': 'A happy-go-lucky Mumbai suburban housewife Sulochana takes up a job as a radio jockey, which leads to unexpected and transformational changes in her life.',
-            'actors': ['Vidya Balan', 'Manav Kaul', 'Neha Dhupia'],
-            'languages': ['Hindi', 'English'],
-            'duration_seconds': 8400,
-            'viewer_rating': 'U',
-            'genres': ['Drama', 'Comedy'],
-            'average_rating': 4.2,
-            'producer_id': 'tanujGarg'
         },
         {
             'id': 8,
@@ -276,8 +284,9 @@ def populate_demo_producer_and_movies():
              json.dumps(movie['genres']), movie['average_rating'], datetime.now().isoformat())
         )
     
-    # Update provide-these.txt with image requirements
-    with open('../provide-these.txt', 'w') as f:
+    # Update provide-these.txt with image requirements (inside pqr-entertainment)
+    assets_req_path = os.path.join(os.path.dirname(__file__), 'provide-these.txt')
+    with open(assets_req_path, 'w') as f:
         f.write('# Asset Requirements for Theatre Booking Management System\n')
         f.write('# Place all assets in pqr-entertainment/assets/ folder\n\n')
         f.write('# Movie Cover Images\n')
@@ -344,8 +353,9 @@ def populate_demo_events():
              json.dumps(event['genres']), event['average_rating'], datetime.now().isoformat())
         )
     
-    # Update provide-these.txt
-    with open('../provide-these.txt', 'a') as f:
+    # Update provide-these.txt (inside pqr-entertainment)
+    assets_req_path = os.path.join(os.path.dirname(__file__), 'provide-these.txt')
+    with open(assets_req_path, 'a') as f:
         f.write('\n# Event Cover Images\n')
         for event in events:
             filename = f"{event['title'].replace(' ', '_')}.jpg"
@@ -365,56 +375,67 @@ def populate_scheduled_screens():
         fetch_all=True
     )
     
-    # Create schedules for next 3 days
+    # Create base schedules for next 3 days (existing logic)
     for day_offset in range(4):  # Today + next 3 days
         date = datetime.now() + timedelta(days=day_offset)
-        
         for theatre in theatres:
-            # Schedule different movies on different screens
-            for screen_num in range(1, 6):  # 5 screens
+            for screen_num in range(1, 5+1):  # 5 screens
                 movie_idx = (screen_num + day_offset) % len(movies)
                 movie_id = movies[movie_idx]['movie_id']
-                
-                # Morning show
-                start_time = date.replace(hour=10, minute=0, second=0).isoformat()
-                end_time = date.replace(hour=13, minute=0, second=0).isoformat()
-                
-                # Initialize empty seat map (all available)
+                # Morning/Afternoon/Evening
                 seat_map = [[0 for _ in range(10)] for _ in range(10)]
-                
-                db.execute_query(
-                    """INSERT INTO scheduled_screens (theatre_id, movie_id, screen_number, 
-                       start_time, end_time, seat_map_json, price_economy, price_central, price_premium)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (theatre['theatre_id'], movie_id, screen_num, start_time, end_time,
-                     json.dumps(seat_map), 150.0, 200.0, 300.0)
+                for st, et, pe, pc, pp in [
+                    ((10,0,0), (13,0,0), 150.0, 200.0, 300.0),
+                    ((14,30,0), (17,30,0), 150.0, 200.0, 300.0),
+                    ((19,0,0), (22,0,0), 200.0, 250.0, 350.0),
+                ]:
+                    start_time = date.replace(hour=st[0], minute=st[1], second=st[2]).isoformat()
+                    end_time = date.replace(hour=et[0], minute=et[1], second=et[2]).isoformat()
+                    db.execute_query(
+                        """INSERT INTO scheduled_screens (theatre_id, movie_id, screen_number,
+                           start_time, end_time, seat_map_json, price_economy, price_central, price_premium)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (theatre['theatre_id'], movie_id, screen_num, start_time, end_time,
+                         json.dumps(seat_map), pe, pc, pp)
+                    )
+
+    # Coverage step: ensure every movie appears in every city each day (at least one show)
+    cities = sorted({t['city'] for t in theatres})
+    timeslots = [(12, 0, 0), (16, 0, 0), (20, 0, 0)]  # fallback times
+    for day_offset in range(4):
+        date = datetime.now() + timedelta(days=day_offset)
+        for city in cities:
+            city_theatres = [t for t in theatres if t['city'] == city]
+            if not city_theatres:
+                continue
+            for mi, m in enumerate(movies):
+                # Check if any show exists for this movie in this city on this date
+                existing = db.execute_query(
+                    """
+                    SELECT 1 FROM scheduled_screens ss
+                    JOIN theatres t ON ss.theatre_id = t.theatre_id
+                    WHERE t.city = ? AND ss.movie_id = ? AND DATE(ss.start_time) = DATE(?)
+                    LIMIT 1
+                    """,
+                    (city, m['movie_id'], date.isoformat()), fetch_one=True
                 )
-                
-                # Afternoon show
-                start_time = date.replace(hour=14, minute=30, second=0).isoformat()
-                end_time = date.replace(hour=17, minute=30, second=0).isoformat()
-                
+                if existing:
+                    continue
+                # Insert a single show for coverage
+                theatre = city_theatres[mi % len(city_theatres)]
+                screen_num = (mi % 5) + 1
+                h, mn, s = timeslots[mi % len(timeslots)]
+                start_time = date.replace(hour=h, minute=mn, second=s)
+                end_time = start_time + timedelta(hours=3)
+                seat_map = [[0 for _ in range(10)] for _ in range(10)]
                 db.execute_query(
                     """INSERT INTO scheduled_screens (theatre_id, movie_id, screen_number,
                        start_time, end_time, seat_map_json, price_economy, price_central, price_premium)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (theatre['theatre_id'], movie_id, screen_num, start_time, end_time,
-                     json.dumps(seat_map), 150.0, 200.0, 300.0)
+                    (theatre['theatre_id'], m['movie_id'], screen_num, start_time.isoformat(), end_time.isoformat(),
+                     json.dumps(seat_map), 150.0, 220.0, 320.0)
                 )
-                
-                # Evening show
-                start_time = date.replace(hour=19, minute=0, second=0).isoformat()
-                end_time = date.replace(hour=22, minute=0, second=0).isoformat()
-                
-                db.execute_query(
-                    """INSERT INTO scheduled_screens (theatre_id, movie_id, screen_number,
-                       start_time, end_time, seat_map_json, price_economy, price_central, price_premium)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (theatre['theatre_id'], movie_id, screen_num, start_time, end_time,
-                     json.dumps(seat_map), 200.0, 250.0, 350.0)
-                )
-    
-    print("✓ Scheduled screens populated")
+    print("✓ Scheduled screens populated (all movies covered in each city)")
 
 
 def populate_employees():
@@ -443,11 +464,143 @@ def populate_employees():
     print("✓ Employees populated")
 
 
+def populate_users():
+    """Create multiple demo users with balances (idempotent by username)"""
+    users = [
+        ('alice', 'password', 'user', 'Alice Johnson', 'alice@example.com', 1500),
+        ('bob', 'password', 'user', 'Bob Martin', 'bob@example.com', 1200),
+        ('carol', 'password', 'user', 'Carol Peters', 'carol@example.com', 800),
+        ('dave', 'password', 'user', 'Dave Singh', 'dave@example.com', 500),
+        ('emma', 'password', 'user', 'Emma Watson', 'emma@example.com', 2000),
+        ('frank', 'password', 'user', 'Frank Castle', 'frank@example.com', 300),
+        ('grace', 'password', 'user', 'Grace Lee', 'grace@example.com', 900),
+        ('henry', 'password', 'user', 'Henry Ford', 'henry@example.com', 1100),
+    ]
+    for u in users:
+        db.execute_query(
+            "INSERT OR IGNORE INTO users (username, password, role, name, email, balance) VALUES (?, ?, ?, ?, ?, ?)",
+            u
+        )
+    print("✓ Users populated")
+
+
+def populate_event_schedules():
+    """Create scheduled screens for events in various theatres and dates"""
+    events = db.execute_query("SELECT event_id FROM events", fetch_all=True)
+    if not events:
+        print("! No events to schedule")
+        return
+    theatres = db.execute_query(
+        "SELECT theatre_id FROM theatres WHERE hall_type = 'stage'",
+        fetch_all=True
+    )
+    if not theatres:
+        print("! No theatres found for events")
+        return
+    for day_offset in range(1, 5):
+        date = datetime.now() + timedelta(days=day_offset)
+        for th in theatres[:6]:  # a subset to avoid explosion
+            for idx, ev in enumerate(events[:3]):  # few events per theatre
+                start_dt = date.replace(hour=18 + (idx % 3)*2, minute=0, second=0)
+                end_dt = start_dt + timedelta(hours=2)
+                start_time = start_dt.isoformat()
+                end_time = end_dt.isoformat()
+                seat_map = [[0 for _ in range(10)] for _ in range(10)]
+                db.execute_query(
+                    """INSERT INTO scheduled_screens (theatre_id, event_id, screen_number, start_time, end_time, seat_map_json, price_economy, price_central, price_premium)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (th['theatre_id'], ev['event_id'], (idx % 5) + 1, start_time, end_time, json.dumps(seat_map), 200.0, 300.0, 450.0)
+                )
+    print("✓ Event schedules populated")
+
+
+def populate_random_bookings():
+    """Generate random bookings with limited volume for speed; update seat maps with progress logs"""
+    users = db.execute_query("SELECT user_id, balance FROM users WHERE role='user'", fetch_all=True)
+    screens = db.execute_query("SELECT screen_id, seat_map_json, price_economy, price_central, price_premium FROM scheduled_screens", fetch_all=True)
+    if not users or not screens:
+        print("! Skipped bookings (no users or screens)")
+        return
+    # Limit processed screens to keep runtime reasonable
+    max_screens = min(250, len(screens))
+    screens = screens[:max_screens]
+    for idx, s in enumerate(screens, start=1):
+        # pick 3-8 seats to book
+        to_book = random.randint(3, 8)
+        try:
+            seat_map = json.loads(s['seat_map_json'])
+        except:
+            seat_map = [[0 for _ in range(10)] for _ in range(10)]
+        booked_now = 0
+        attempts = 0
+        while booked_now < to_book and attempts < 80:
+            attempts += 1
+            r = random.randint(0,9)
+            c = random.randint(0,9)
+            if seat_map[r][c] == 1:
+                continue
+            # determine price based on row as per UI logic
+            if r < 3:
+                price = s['price_premium'] or 400
+            elif r < 7:
+                price = s['price_central'] or 300
+            else:
+                price = s['price_economy'] or 200
+            seat_label = chr(ord('J') - r) + str(c+1)
+            user = random.choice(users)
+            # insert booking, do not enforce wallet deduction here (demo data)
+            when = datetime.now() - timedelta(days=random.randint(0, 14))
+            db.execute_query(
+                """INSERT INTO bookings (user_id, screen_id, seat, amount, status, refunded_flag, booking_date)
+                       VALUES (?, ?, ?, ?, 'confirmed', 0, ?)""",
+                (user['user_id'], s['screen_id'], seat_label, float(price), when.isoformat())
+            )
+            seat_map[r][c] = 1
+            booked_now += 1
+        # update seat map
+        db.execute_query("UPDATE scheduled_screens SET seat_map_json = ? WHERE screen_id = ?", (json.dumps(seat_map), s['screen_id']))
+        if idx % 50 == 0 or idx == max_screens:
+            print(f"  - Bookings progress: {idx}/{max_screens} screens updated")
+    print("✓ Random bookings populated and seat maps updated")
+
+
+def populate_watchlists_and_feedbacks():
+    """Add random watchlist entries and feedback messages"""
+    users = db.execute_query("SELECT user_id FROM users WHERE role='user'", fetch_all=True)
+    movies = db.execute_query("SELECT movie_id FROM movies", fetch_all=True)
+    events = db.execute_query("SELECT event_id FROM events", fetch_all=True)
+    if users:
+        for u in users:
+            # 3 random movies and 2 random events
+            for m in random.sample(movies, min(3, len(movies))):
+                db.execute_query("INSERT INTO watchlist (user_id, movie_id) VALUES (?, ?)", (u['user_id'], m['movie_id']))
+            for e in random.sample(events, min(2, len(events))):
+                db.execute_query("INSERT INTO watchlist (user_id, event_id) VALUES (?, ?)", (u['user_id'], e['event_id']))
+            # feedback
+            if random.random() < 0.6:
+                msg = random.choice([
+                    "Great experience!",
+                    "Could improve seat spacing",
+                    "Loved the UI and quick booking",
+                    "Payment was smooth",
+                    "Please add more shows in my city",
+                ])
+                db.execute_query(
+                    "INSERT INTO feedbacks (user_id, text, timestamp, read_flag) VALUES (?, ?, ?, 0)",
+                    (u['user_id'], msg, datetime.now().isoformat())
+                )
+    print("✓ Watchlists and feedbacks populated")
+
+
 if __name__ == "__main__":
     print("Populating demo data...")
     populate_theatres()
+    populate_users()
     populate_demo_producer_and_movies()
     populate_demo_events()
     populate_scheduled_screens()
+    populate_event_schedules()
+    populate_random_bookings()
     populate_employees()
+    populate_watchlists_and_feedbacks()
     print("\n✓ All demo data populated successfully!")
