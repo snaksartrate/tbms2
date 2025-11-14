@@ -37,3 +37,19 @@ def suggest_next_slot(theatre_id: int, screen_number: int, start_iso: str, durat
         if not has_conflict(theatre_id, screen_number, candidate_start.isoformat(), candidate_end.isoformat(), exclude_screen_id):
             return candidate_start.isoformat()
     return ""
+
+def has_city_movie_for_date(city: str, movie_id: int, date_iso: str, exclude_screen_id: int = None) -> bool:
+    """Return True if any show exists in the given city for the movie on the same calendar date.
+    If exclude_screen_id is provided, ignore that screen (for reschedules).
+    """
+    q = (
+        "SELECT ss.screen_id FROM scheduled_screens ss "
+        "JOIN theatres t ON ss.theatre_id = t.theatre_id "
+        "WHERE t.city = ? AND ss.movie_id = ? AND DATE(ss.start_time) = DATE(?)"
+    )
+    params = [city, movie_id, date_iso]
+    if exclude_screen_id is not None:
+        q += " AND ss.screen_id <> ?"
+        params.append(exclude_screen_id)
+    row = db.execute_query(q, tuple(params), fetch_one=True)
+    return bool(row)

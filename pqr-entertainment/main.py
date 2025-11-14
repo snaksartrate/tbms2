@@ -13,6 +13,8 @@ from datetime import datetime
 import json
 import os
 import math
+import threading
+import re
 try:
     from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
     import matplotlib.pyplot as plt
@@ -72,11 +74,9 @@ class theatre_booking_app:
         self.current_event_id = None
         self.image_cache = []  # keep references to PhotoImage
         
-        # Ensure default admin user exists and credentials file is exported
+        # Ensure default admin user exists (auto seeding/sync disabled)
         try:
             self._ensure_default_admin()
-            self._seed_producers_and_reassign()
-            self.export_credentials_to_file()
         except Exception:
             pass
         
@@ -179,8 +179,188 @@ class theatre_booking_app:
                     f.write('\n')
         except Exception:
             pass
+
+    def _normalize_username(self, uname):
+        """Lowercase and validate username against rules: a-z, 0-9, ., _, 3-20 chars."""
+        if not isinstance(uname, str):
+            return None
+        uname = uname.strip().lower()
+        if re.fullmatch(r"[a-z0-9._]{3,20}", uname):
+            return uname
+        return None
+
+    def _parse_demo_credentials(self):
+        """Parse demo_credentials.txt into role->set(usernames). Ignores invalid lines."""
         try:
-            messagebox.showinfo("Info", message)
+            base_dir = os.path.dirname(os.path.dirname(__file__))
+            in_path = os.path.join(base_dir, 'demo_credentials.txt')
+            if not os.path.exists(in_path):
+                return {'admin': set(), 'producer': set(), 'user': set()}
+            section = None
+            roles = {'admin': set(), 'producer': set(), 'user': set()}
+            with open(in_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith('[') and line.endswith(']'):
+                        tag = line[1:-1].strip().lower()
+                        if tag == 'users':
+                            section = 'user'
+                        elif tag == 'producer':
+                            section = 'producer'
+                        elif tag == 'admin':
+                            section = 'admin'
+                        else:
+                            section = None
+                        continue
+                    if line.startswith('-') and section:
+                        try:
+                            part = line[1:].strip()
+                            if ' / ' in part:
+                                uname = part.split(' / ')[0].strip()
+                            else:
+                                uname = part
+                            norm = self._normalize_username(uname)
+                            if norm:
+                                roles[section].add(norm)
+                        except Exception:
+                            continue
+            return roles
+        except Exception:
+            return {'admin': set(), 'producer': set(), 'user': set()}
+
+    def _ensure_producer_profile(self, user_id, display_name=None):
+        """Ensure producers row exists for given user; return producer_id."""
+        prof = db.execute_query("SELECT * FROM producers WHERE user_id=?", (user_id,), fetch_one=True)
+        if prof:
+            return prof['producer_id']
+        if not display_name:
+            # derive a basic name from the username
+            user = db.execute_query("SELECT * FROM users WHERE user_id=?", (user_id,), fetch_one=True)
+            uname = user['username'] if user else 'producer'
+            display_name = uname.replace('.', ' ').replace('_', ' ').title()
+        pid = db.execute_query("INSERT INTO producers (user_id, name, details) VALUES (?, ?, ?)", (user_id, display_name, ""))
+        return pid
+
+    def _create_user(self, username, role, password='pass123', name=None, email=None):
+        if not name:
+            name = username.replace('.', ' ').replace('_', ' ').title()
+        if not email:
+            email = f"{username}@example.com"
+        uid = db.execute_query(
+            "INSERT INTO users (username, password, role, name, email, balance) VALUES (?, ?, ?, ?, ?, 0)",
+            (username, password, role, name, email)
+        )
+        return uid
+
+    def _ensure_owner_user_for_producer_name(self, producer_name):
+        """Given a producer/display name, ensure a user+producer exist and return producer_id."""
+        uname = re.sub(r"[^a-z0-9._]", '_', producer_name.strip().lower().replace(' ', '_'))
+        uname = re.sub(r"_+", '_', uname)
+        uname = uname.strip('_')
+        if not self._normalize_username(uname):
+            # fallback with prefix
+            base = re.sub(r"[^a-z0-9._]", '', producer_name.strip().lower()) or 'producer'
+            uname = (base[:12] + '_prod')[:20]
+        user = db.execute_query("SELECT * FROM users WHERE username=?", (uname,), fetch_one=True)
+        if not user:
+            uid = self._create_user(uname, 'producer', 'pass123')
+        else:
+            uid = user['user_id']
+            # ensure role and password
+            db.execute_query("UPDATE users SET role='producer', password='pass123' WHERE user_id=?", (uid,))
+        pid = self._ensure_producer_profile(uid, producer_name)
+        return pid
+
+    def sync_from_demo_credentials(self):
+        """Synchronize DB to demo_credentials.txt and fix orphaned content owners.
+        - Delete users not in the file
+        - Set all listed users passwords to pass123 and correct role
+        - Ensure producers/hosts exist and link to movies/events
+        - Update demo_credentials.txt afterwards
+        """
+        roles = self._parse_demo_credentials()
+        allowed = roles['admin'] | roles['producer'] | roles['user']
+        # 1) Delete users not listed
+        all_users = db.execute_query("SELECT * FROM users", fetch_all=True) or []
+        for u in all_users:
+            uname = u['username']
+            if uname not in allowed:
+                # clean dependents
+                try:
+                    db.execute_query("DELETE FROM bookings WHERE user_id=?", (u['user_id'],))
+                    db.execute_query("DELETE FROM feedbacks WHERE user_id=?", (u['user_id'],))
+                    db.execute_query("DELETE FROM watchlist WHERE user_id=?", (u['user_id'],))
+                    db.execute_query("DELETE FROM producers WHERE user_id=?", (u['user_id'],))
+                except Exception:
+                    pass
+                db.execute_query("DELETE FROM users WHERE user_id=?", (u['user_id'],))
+
+        # 2) Ensure listed users exist with correct role and password
+        for uname in roles['admin']:
+            existing = db.execute_query("SELECT * FROM users WHERE username=?", (uname,), fetch_one=True)
+            if not existing:
+                self._create_user(uname, 'admin', 'pass123')
+            else:
+                db.execute_query("UPDATE users SET role='admin', password='pass123' WHERE user_id=?", (existing['user_id'],))
+        for uname in roles['producer']:
+            existing = db.execute_query("SELECT * FROM users WHERE username=?", (uname,), fetch_one=True)
+            if not existing:
+                uid = self._create_user(uname, 'producer', 'pass123')
+            else:
+                uid = existing['user_id']
+                db.execute_query("UPDATE users SET role='producer', password='pass123' WHERE user_id=?", (uid,))
+            self._ensure_producer_profile(uid)
+        for uname in roles['user']:
+            existing = db.execute_query("SELECT * FROM users WHERE username=?", (uname,), fetch_one=True)
+            if not existing:
+                self._create_user(uname, 'user', 'pass123')
+            else:
+                db.execute_query("UPDATE users SET role='user', password='pass123' WHERE user_id=?", (existing['user_id'],))
+
+        # 3) Fix movies: ensure producer exists
+        movies = db.execute_query("SELECT movie_id, producer_id FROM movies", fetch_all=True) or []
+        for m in movies:
+            prod = None
+            if m['producer_id']:
+                prod = db.execute_query("SELECT * FROM producers WHERE producer_id=?", (m['producer_id'],), fetch_one=True)
+            if not prod:
+                # Create a new producer owner specific to this movie
+                pname = f"Producer Movie {m['movie_id']}"
+                new_pid = self._ensure_owner_user_for_producer_name(pname)
+                db.execute_query("UPDATE movies SET producer_id=? WHERE movie_id=?", (new_pid, m['movie_id']))
+            else:
+                # ensure producer has a backing user
+                u = db.execute_query("SELECT * FROM users WHERE user_id=?", (prod['user_id'],), fetch_one=True)
+                if not u:
+                    pname = prod.get('name') or f"Producer Movie {m['movie_id']}"
+                    new_pid = self._ensure_owner_user_for_producer_name(pname)
+                    db.execute_query("UPDATE movies SET producer_id=? WHERE movie_id=?", (new_pid, m['movie_id']))
+
+        # 4) Fix events: ensure host exists (producers table is reused as hosts)
+        try:
+            events = db.execute_query("SELECT event_id, host_id FROM events", fetch_all=True) or []
+            for e in events:
+                host = None
+                if e['host_id']:
+                    host = db.execute_query("SELECT * FROM producers WHERE producer_id=?", (e['host_id'],), fetch_one=True)
+                if not host:
+                    hname = f"Host Event {e['event_id']}"
+                    new_pid = self._ensure_owner_user_for_producer_name(hname)
+                    db.execute_query("UPDATE events SET host_id=? WHERE event_id=?", (new_pid, e['event_id']))
+                else:
+                    u = db.execute_query("SELECT * FROM users WHERE user_id=?", (host['user_id'],), fetch_one=True)
+                    if not u:
+                        hname = host.get('name') or f"Host Event {e['event_id']}"
+                        new_pid = self._ensure_owner_user_for_producer_name(hname)
+                        db.execute_query("UPDATE events SET host_id=? WHERE event_id=?", (new_pid, e['event_id']))
+        except Exception:
+            pass
+
+        # 5) Update credentials file to reflect current users
+        try:
+            self.export_credentials_to_file()
         except Exception:
             pass
     
@@ -204,6 +384,14 @@ class theatre_booking_app:
             pwd = password_var.get().strip()
             if not uname or not pwd:
                 messagebox.showerror("Error", "Enter username and password")
+                return
+            # Basic username/password validation
+            import re
+            if not re.fullmatch(r"[A-Za-z0-9_]{3,20}", uname):
+                messagebox.showerror("Error", "Username must be 3-20 chars (letters, numbers, underscore)")
+                return
+            if len(pwd) < 6 or not re.search(r"[A-Za-z]", pwd) or not re.search(r"\d", pwd):
+                messagebox.showerror("Error", "Password must be at least 6 chars with letters and numbers")
                 return
             user = db.execute_query(
                 "SELECT * FROM users WHERE username = ? AND password = ?",
@@ -364,6 +552,8 @@ class theatre_booking_app:
                      command=lambda: self.navigate_to('employees'), **menu_style).pack(fill=tk.X)
             tk.Button(self.menu_overlay, text="📺 Screen Manager", 
                      command=lambda: self.navigate_to('screen_manager'), **menu_style).pack(fill=tk.X)
+            tk.Button(self.menu_overlay, text="🎬 Manage Movies", 
+                     command=lambda: self.navigate_to('manage_movies'), **menu_style).pack(fill=tk.X)
             tk.Button(self.menu_overlay, text="💬 Feedback", 
                      command=lambda: self.navigate_to('admin_feedback'), **menu_style).pack(fill=tk.X)
             tk.Button(self.menu_overlay, text="📊 Analytics", 
@@ -413,6 +603,7 @@ class theatre_booking_app:
             'screen_manager': self.show_screen_manager,
             'admin_feedback': self.show_admin_feedback,
             'admin_analytics': self.show_admin_analytics,
+            'manage_movies': self.show_manage_movies,
         }
         if page_name in routes:
             routes[page_name]()
@@ -623,8 +814,6 @@ class theatre_booking_app:
                 continue
         return sorted(langs_set)
     
-
-    
     def show_register_page(self, role):
         """Show registration page"""
         self.clear_container()
@@ -670,6 +859,18 @@ class theatre_booking_app:
             
             if password != confirm_pwd:
                 messagebox.showerror("Error", "Passwords don't match")
+                return
+            
+            # Email and username/password validation
+            import re
+            if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+                messagebox.showerror("Error", "Enter a valid email address")
+                return
+            if not re.fullmatch(r"[A-Za-z0-9_]{3,20}", username):
+                messagebox.showerror("Error", "Username must be 3-20 chars (letters, numbers, underscore)")
+                return
+            if len(password) < 6 or not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+                messagebox.showerror("Error", "Password must be at least 6 chars with letters and numbers")
                 return
             
             # Check if username exists
@@ -1442,7 +1643,6 @@ class theatre_booking_app:
             languages_json = json.dumps([l.strip() for l in languages.split(',') if l.strip()]) if languages != '' else (m.get('languages_json') if edit else json.dumps([]))
             genres_json = json.dumps([g.strip() for g in genres.split(',') if g.strip()]) if genres != '' else (m.get('genres_json') if edit else json.dumps([]))
 
-            # cover image path and asset log
             if cover_filename:
                 cover_image_path = f"assets/{cover_filename}"
             else:
@@ -1470,6 +1670,9 @@ class theatre_booking_app:
             self.show_toast("Movie saved")
             popup.destroy()
             self.refresh_page()
+
+        # Add Save button (missing earlier)
+        tk.Button(form, text="Save", bg='#4CAF50', fg='white', font=('Arial', 12, 'bold'), command=on_save).pack(pady=12)
 
     def open_event_form(self, edit=False, event=None):
         """Popup for add/edit event. If edit=True, prefill with event."""
@@ -1740,7 +1943,75 @@ class theatre_booking_app:
         db.execute_query("DELETE FROM movies WHERE movie_id = ? AND producer_id = ?", (movie_id, producer_id))
         self.show_toast("Movie deleted")
         self.refresh_page()
-    
+
+    def _refund_and_delete_screen(self, screen_id):
+        bookings = db.execute_query("SELECT * FROM bookings WHERE screen_id = ? AND status = 'confirmed'", (screen_id,), fetch_all=True)
+        for b in (bookings or []):
+            user = db.execute_query("SELECT balance FROM users WHERE user_id = ?", (b['user_id'],), fetch_one=True)
+            new_bal = (user['balance'] or 0) + (b['amount'] or 0)
+            db.execute_query("UPDATE users SET balance = ? WHERE user_id = ?", (new_bal, b['user_id']))
+            db.execute_query("UPDATE bookings SET status = 'cancelled', refunded_flag = 1 WHERE booking_id = ?", (b['booking_id'],))
+        db.execute_query("DELETE FROM scheduled_screens WHERE screen_id = ?", (screen_id,))
+
+    def admin_delete_show(self, screen_id):
+        if not messagebox.askyesno("Confirm", "Delete this show and refund all bookings? This cannot be undone."):
+            return
+        self._refund_and_delete_screen(screen_id)
+        self.show_toast("Show deleted and bookings refunded")
+        self.refresh_page()
+
+    def admin_delete_movie(self, movie_id):
+        if not messagebox.askyesno("Confirm", "Delete this movie, unschedule all its shows, and refund all bookings? This cannot be undone."):
+            return
+        # show a lightweight progress window
+        self._progress_window = tk.Toplevel(self.root)
+        self._progress_window.title("Processing...")
+        self._progress_window.geometry("300x120")
+        self._progress_window.configure(bg='#1a1a1a')
+        tk.Label(self._progress_window, text="Deleting movie...\nPlease wait", bg='#1a1a1a', fg='white').pack(expand=True, fill=tk.BOTH, padx=12, pady=12)
+        self._progress_window.transient(self.root)
+        self._progress_window.grab_set()
+        self.root.update_idletasks()
+        # run heavy DB work off the UI thread
+        threading.Thread(target=self._admin_delete_movie_worker, args=(movie_id,), daemon=True).start()
+
+    def _admin_delete_movie_worker(self, movie_id):
+        """Background thread worker: refund bookings for all screens of the movie and delete the movie.
+        Only performs DB operations. No Tk calls here.
+        """
+        try:
+            screens = db.execute_query("SELECT screen_id FROM scheduled_screens WHERE movie_id = ?", (movie_id,), fetch_all=True)
+            for s in (screens or []):
+                self._refund_and_delete_screen(s['screen_id'])
+            db.execute_query("DELETE FROM movies WHERE movie_id = ?", (movie_id,))
+            # signal success back on main thread
+            self.root.after(0, lambda: self._on_admin_delete_movie_done(success=True))
+        except Exception:
+            self.root.after(0, lambda: self._on_admin_delete_movie_done(success=False))
+
+    def _on_admin_delete_movie_done(self, success):
+        """Runs on main thread after background deletion completes."""
+        try:
+            if hasattr(self, '_progress_window') and self._progress_window and self._progress_window.winfo_exists():
+                self._progress_window.destroy()
+        except Exception:
+            pass
+        if success:
+            self.show_toast("Movie deleted, shows unscheduled, bookings refunded")
+            self.refresh_page()
+        else:
+            messagebox.showerror("Error", "Failed to delete movie. Please try again.")
+
+    def admin_delete_event(self, event_id):
+        if not messagebox.askyesno("Confirm", "Delete this event, unschedule all its shows, and refund all bookings? This cannot be undone."):
+            return
+        screens = db.execute_query("SELECT screen_id FROM scheduled_screens WHERE event_id = ?", (event_id,), fetch_all=True)
+        for s in (screens or []):
+            self._refund_and_delete_screen(s['screen_id'])
+        db.execute_query("DELETE FROM events WHERE event_id = ?", (event_id,))
+        self.show_toast("Event deleted, shows unscheduled, bookings refunded")
+        self.refresh_page()
+
     # ==================== ADMIN PAGES ====================
     
     def show_admin_profile(self):
@@ -1783,6 +2054,60 @@ class theatre_booking_app:
         
         for i in range(4):
             stats_frame.grid_columnconfigure(i, weight=1)
+
+        # Maintenance actions
+        actions = tk.Frame(content_frame, bg='#1a1a1a')
+        actions.pack(fill=tk.X, pady=10)
+        tk.Button(actions, text="Purge Non-Core Data", bg='#d32f2f', fg='white',
+                  command=self.purge_non_core_data).pack(side=tk.LEFT, padx=5)
+        tk.Button(actions, text="Reset All Passwords", bg='#FF9800', fg='white',
+                  command=self.reset_all_passwords).pack(side=tk.LEFT, padx=5)
+
+    def purge_non_core_data(self):
+        """Delete all data except movies and theatres; ensure admin snaksartrate/password.
+        Keeps producers because movies reference them; cities remain as theatre.city text.
+        """
+        if not messagebox.askyesno("Confirm", "This will delete all bookings, schedules, events, employees, feedbacks, watchlists, and users (except admin). Continue?"):
+            return
+        # Delete dependent tables first (FK order)
+        try:
+            db.execute_query("DELETE FROM bookings")
+        except Exception:
+            pass
+        try:
+            db.execute_query("DELETE FROM scheduled_screens")
+        except Exception:
+            pass
+        try:
+            db.execute_query("DELETE FROM events")
+        except Exception:
+            pass
+        try:
+            db.execute_query("DELETE FROM employees")
+        except Exception:
+            pass
+        try:
+            db.execute_query("DELETE FROM feedbacks")
+        except Exception:
+            pass
+        try:
+            db.execute_query("DELETE FROM watchlist")
+        except Exception:
+            pass
+        # Reset admin and remove other users
+        existing = db.execute_query("SELECT user_id FROM users WHERE username = ?", ("snaksartrate",), fetch_one=True)
+        if existing:
+            db.execute_query("UPDATE users SET password='password', role='admin', name='Administrator', email='admin@example.com', balance=0 WHERE username='snaksartrate'")
+        else:
+            db.execute_query(
+                "INSERT INTO users (username, password, role, name, email, balance) VALUES (?, ?, 'admin', ?, ?, 0)",
+                ("snaksartrate", "password", "Administrator", "admin@example.com")
+            )
+        # Remove all users except the admin
+        db.execute_query("DELETE FROM users WHERE username <> 'snaksartrate'")
+        self.show_toast("Non-core data purged; admin reset to snaksartrate/password")
+        # Refresh any pages relying on counts
+        self.refresh_page()
     
     def show_cinema_halls(self):
         """Show cinema halls management"""
@@ -2013,6 +2338,12 @@ class theatre_booking_app:
         # Fallback if import failed
         messagebox.showerror("Error", "Admin module not available")
 
+    def show_manage_movies(self):
+        """Show movie management (delegated)"""
+        if pages_admin and hasattr(pages_admin, 'show_manage_movies'):
+            return pages_admin.show_manage_movies(self)
+        messagebox.showerror("Error", "Admin module not available")
+
     def reschedule_screen_popup(self, screen_id):
         rec = db.execute_query("SELECT * FROM scheduled_screens WHERE screen_id = ?", (screen_id,), fetch_one=True)
         if not rec:
@@ -2055,6 +2386,16 @@ class theatre_booking_app:
                     else:
                         messagebox.showerror("Conflict", "Overlaps with another show. Please choose a different time.")
                     return
+                # City+movie per-day uniqueness (allow current screen via exclude)
+                try:
+                    city_row = db.execute_query("SELECT city FROM theatres WHERE theatre_id=?", (theatre_id,), fetch_one=True)
+                    city_name = city_row['city'] if city_row else None
+                    movie_id = rec['movie_id']
+                    if city_name and movie_id and sched.has_city_movie_for_date(city_name, movie_id, new_start.isoformat(), exclude_screen_id=screen_id):
+                        messagebox.showerror("Rule", "This movie already has a show scheduled in this city on the selected date")
+                        return
+                except Exception:
+                    pass
             db.execute_query("UPDATE scheduled_screens SET start_time = ?, end_time = ? WHERE screen_id = ?", (new_start.isoformat(), new_end.isoformat(), screen_id))
             self.show_toast("Schedule updated")
             popup.destroy()
@@ -2074,6 +2415,111 @@ class theatre_booking_app:
         db.execute_query("DELETE FROM scheduled_screens WHERE screen_id = ?", (screen_id,))
         self.show_toast("Show unscheduled and refunded")
         self.refresh_page()
+
+    def admin_schedule_screen_popup(self, city_default=None, date_default=None, on_success=None):
+        popup = tk.Toplevel(self.root)
+        popup.title("Schedule New Show")
+        popup.geometry("520x520")
+        popup.configure(bg='#1a1a1a')
+
+        # Inputs
+        tk.Label(popup, text="City", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        cities_rows = db.execute_query("SELECT DISTINCT city FROM theatres", fetch_all=True) or []
+        cities = sorted([r['city'] for r in cities_rows])
+        city_var = tk.StringVar(value=city_default if city_default in cities else (cities[0] if cities else ''))
+        ttk.Combobox(popup, textvariable=city_var, values=cities, state='readonly', width=24).pack()
+
+        tk.Label(popup, text="Theatre", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        def theatres_for_city():
+            return db.execute_query("SELECT theatre_id, name FROM theatres WHERE city = ?", (city_var.get(),), fetch_all=True) or []
+        theatre_rows = theatres_for_city()
+        theatre_map = {f"{r['name']} (#{r['theatre_id']})": r['theatre_id'] for r in theatre_rows}
+        theatre_names = list(theatre_map.keys())
+        theatre_var = tk.StringVar(value=(theatre_names[0] if theatre_names else ''))
+        theatre_combo = ttk.Combobox(popup, textvariable=theatre_var, values=theatre_names, state='readonly', width=36)
+        theatre_combo.pack()
+
+        def refresh_theatres(*_):
+            rows = theatres_for_city()
+            nonlocal theatre_map
+            theatre_map = {f"{r['name']} (#{r['theatre_id']})": r['theatre_id'] for r in rows}
+            names = list(theatre_map.keys())
+            theatre_combo['values'] = names
+            if names:
+                theatre_var.set(names[0])
+            else:
+                theatre_var.set('')
+        city_var.trace_add('write', refresh_theatres)
+
+        tk.Label(popup, text="Movie", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        movies = db.execute_query("SELECT movie_id, title FROM movies ORDER BY title", fetch_all=True) or []
+        movie_map = {f"{m['title']} (#{m['movie_id']})": m['movie_id'] for m in movies}
+        movie_names = list(movie_map.keys())
+        movie_var = tk.StringVar(value=(movie_names[0] if movie_names else ''))
+        ttk.Combobox(popup, textvariable=movie_var, values=movie_names, state='readonly', width=36).pack()
+
+        tk.Label(popup, text="Screen Number", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        screen_var = tk.StringVar(value='1')
+        tk.Entry(popup, textvariable=screen_var).pack()
+
+        tk.Label(popup, text="Date (YYYY-MM-DD)", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        date_var = tk.StringVar(value=(date_default if date_default else datetime.now().strftime('%Y-%m-%d')))
+        tk.Entry(popup, textvariable=date_var).pack()
+
+        tk.Label(popup, text="Start (HH:MM)", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        st_var = tk.StringVar(value='10:00')
+        tk.Entry(popup, textvariable=st_var).pack()
+        tk.Label(popup, text="End (HH:MM)", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        et_var = tk.StringVar(value='13:00')
+        tk.Entry(popup, textvariable=et_var).pack()
+
+        tk.Label(popup, text="Prices (E/C/P)", bg='#1a1a1a', fg='white').pack(pady=(10,2))
+        pe_var = tk.StringVar(value='150')
+        pc_var = tk.StringVar(value='220')
+        pp_var = tk.StringVar(value='320')
+        f_prices = tk.Frame(popup, bg='#1a1a1a'); f_prices.pack()
+        tk.Entry(f_prices, textvariable=pe_var, width=8).pack(side=tk.LEFT, padx=4)
+        tk.Entry(f_prices, textvariable=pc_var, width=8).pack(side=tk.LEFT, padx=4)
+        tk.Entry(f_prices, textvariable=pp_var, width=8).pack(side=tk.LEFT, padx=4)
+
+        def save_new():
+            if not theatre_var.get() or not movie_var.get():
+                messagebox.showerror("Error", "Select theatre and movie")
+                return
+            try:
+                theatre_id = theatre_map[theatre_var.get()]
+                movie_id = movie_map[movie_var.get()]
+                screen_number = int(screen_var.get())
+                start_dt = datetime.fromisoformat(f"{date_var.get()}T{st_var.get()}:00")
+                end_dt = datetime.fromisoformat(f"{date_var.get()}T{et_var.get()}:00")
+                pe = float(pe_var.get()); pc = float(pc_var.get()); pp = float(pp_var.get())
+            except Exception:
+                messagebox.showerror("Error", "Invalid input values")
+                return
+            if end_dt <= start_dt:
+                messagebox.showerror("Error", "End time must be after start time")
+                return
+            # 1) Same theatre+screen conflict check
+            if sched is not None and sched.has_conflict(theatre_id, screen_number, start_dt.isoformat(), end_dt.isoformat()):
+                messagebox.showerror("Conflict", "Overlaps with another show on the same screen")
+                return
+            # 2) City+movie per-day uniqueness
+            if sched is not None and sched.has_city_movie_for_date(city_var.get(), movie_id, start_dt.isoformat()):
+                messagebox.showerror("Rule", "This movie already has a show scheduled in this city on the selected date")
+                return
+            # Insert with default 10x10 seat map of zeros
+            seat_map = [[0 for _ in range(10)] for _ in range(10)]
+            db.execute_query(
+                """INSERT INTO scheduled_screens (theatre_id, movie_id, screen_number, start_time, end_time, seat_map_json, price_economy, price_central, price_premium)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (theatre_id, movie_id, screen_number, start_dt.isoformat(), end_dt.isoformat(), json.dumps(seat_map), pe, pc, pp)
+            )
+            self.show_toast("Show scheduled")
+            popup.destroy()
+            if callable(on_success):
+                on_success()
+
+        tk.Button(popup, text="Save", bg='#4CAF50', fg='white', command=save_new).pack(pady=12)
     
     def show_admin_feedback(self):
         """Show admin feedback page (delegated)"""
@@ -2088,6 +2534,16 @@ class theatre_booking_app:
             (feedback_id,)
         )
         self.show_toast("Feedback marked as read")
+        self.refresh_page()
+
+    def reset_all_passwords(self):
+        """Set every account's password to 'password123' and refresh credentials file"""
+        db.execute_query("UPDATE users SET password = 'password123'")
+        try:
+            self.export_credentials_to_file()
+        except Exception:
+            pass
+        self.show_toast("All user passwords reset to 'password123'")
         self.refresh_page()
 
 

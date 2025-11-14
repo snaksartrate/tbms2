@@ -1,0 +1,61 @@
+Title Page
+Project: Theatre Booking Management System (TBMS)
+Author: [My Name]
+Date: [Insert Date]
+
+Abstract / Summary
+I built a desktop TBMS that lets me manage movies, events, theatres, and user bookings. I used Python (Tkinter) for the UI and SQLite for storage. I implemented admin tools for scheduling shows, enforcing a per-city per-day uniqueness rule, cleaning data, and exporting accounts. The final system keeps one canonical producer, supports easy admin scheduling without conflicts, and provides scripts to inspect and maintain the database.
+
+Table of Contents
+1. Introduction
+2. Literature Review
+3. Methodology
+4. Results & Analysis
+5. Conclusion
+6. Future Scope
+7. References
+
+Introduction
+Problem Statement: I needed a maintainable TBMS to display and control films and events, manage theatres, schedule shows, and handle bookings, with clean data and simple admin workflows.
+Objectives: My objectives were to (a) provide a clear UI for admins and users, (b) enforce sensible constraints (no overlapping shows; at most one show per film per city per day), (c) keep the database clean and minimal, and (d) provide maintenance scripts to audit, reset, and export data.
+Scope: My project includes an admin console (screen manager, feedback manager), user login and balances, theatre and movie catalogs, event support, scheduling, and data maintenance utilities.
+
+Literature Review
+I reviewed typical cinema booking flows and data models (movies, theatres, screens, schedules, bookings) and common constraints used in commercial platforms (no overlapping shows on the same screen; controlling show duplication across cities). I adopted a pragmatic SQLite schema and a Tkinter-based desktop interface for portability and simplicity. I also considered best practices for data hygiene (scripts for resets, deduplication, and exports).
+
+Methodology
+Design:
+- Data model: users, producers, movies, events, theatres, scheduled_screens, bookings, feedbacks.
+- Constraints: (1) no time overlap on the same theatre+screen; (2) at most one show per movie per city per calendar day.
+- Admin UI: Screen Manager page to list and schedule shows; reschedule and delete actions with validation.
+Tools:
+- Python 3, Tkinter UI, SQLite (via sqlite3), custom utility scripts.
+- Project structure: pqr-entertainment/ for app code; utility_scripts/ for maintenance.
+Steps I took:
+1) Stabilized DB: consolidated producers to a single owner; removed duplicate producers and cleaned users per demo file.
+2) Inspection tooling: created an interactive `inspect_db.py` to browse non-empty tables.
+3) Safety utilities: added backup, reset, and export scripts (e.g., admin_and_seats_reset.py, reset_db.py, export_accounts.py).
+4) Scheduling logic: added `has_conflict` and `has_city_movie_for_date` checks; built `admin_schedule_screen_popup` for the Screen Manager. Ensured default 10x10 seat maps and validated times/prices.
+5) Data hygiene: implemented deduplication of events and scheduled shows (keeping lowest ID, re-pointing references) and seat unbooking logic.
+6) Disabled auto-seeding on startup to avoid unintended data population.
+
+Results & Analysis
+- Clean data state: one canonical producer linked to all movies; schedules cleared when required; seat maps normalized (booked -> available).
+- Admin scheduling: I can schedule a new show while the app enforces no screen overlap and one-show-per-film-per-city-per-day.
+- Maintenance: I can backup, dedupe, reset, and export users/producers with single commands. The database is now compact and consistent.
+- Usability: The menu-driven DB inspector and Screen Manager improvements shortened my feedback loop and reduced errors.
+
+Conclusion
+I achieved my objectives. My TBMS supports clean scheduling, maintains data hygiene, and gives me straightforward tools for inspection, deduplication, and export. The system is easier to operate and extend because I separated utility scripts from application code and disabled auto-seeding.
+
+Future Scope
+- Add role-based access control across all admin actions.
+- Integrate reporting dashboards (occupancy, revenue per city, film performance) using charts.
+- Add automated tests and CI checks for data constraints.
+- Support online APIs (payments, email notifications) and a web-based frontend.
+- Introduce soft constraints and suggestions for scheduling (auto-pick next slots across theatres in a city).
+
+References
+- Python Standard Library (tkinter, sqlite3, datetime)
+- SQLite documentation and SQL basics
+- General cinema booking data-model patterns and conflict detection heuristics

@@ -75,12 +75,16 @@ def show_screen_manager(app):
                 tk.Label(rowf, text=et, bg='#2a2a2a', fg='#ccc', font=('Arial', 10), padx=10, pady=6, anchor='w').grid(row=0, column=4, sticky='ew')
                 actions = tk.Frame(rowf, bg='#2a2a2a'); actions.grid(row=0, column=5, sticky='e', padx=8)
                 tk.Button(actions, text="Reschedule", bg='#2196F3', fg='white', command=lambda sid=r['screen_id']: app.reschedule_screen_popup(sid)).pack(side=tk.LEFT, padx=4)
-                tk.Button(actions, text="Unschedule", bg='#d32f2f', fg='white', command=lambda sid=r['screen_id']: app.unschedule_screen(sid)).pack(side=tk.LEFT, padx=4)
+                tk.Button(actions, text="Delete Show", bg='#d32f2f', fg='white', command=lambda sid=r['screen_id']: app.admin_delete_show(sid)).pack(side=tk.LEFT, padx=4)
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
     tk.Button(controls, text="Apply", bg='#4CAF50', fg='white', command=load_list).pack(side=tk.LEFT, padx=10)
+    tk.Button(controls, text="Schedule New Show", bg='#2196F3', fg='white',
+              command=lambda: app.admin_schedule_screen_popup(city_default=city_var.get(),
+                                                              date_default=date_var.get(),
+                                                              on_success=load_list)).pack(side=tk.LEFT, padx=6)
     load_list()
 
 
@@ -159,3 +163,47 @@ def show_admin_feedback(app):
         load_page(0)
     filter_var.trace_add('write', on_filter_change)
     load_page(0)
+
+def show_manage_movies(app):
+    app.clear_container()
+    app.add_navigation_bar()
+    app.add_header(show_menu=True, show_username=True)
+
+    content = tk.Frame(app.main_container, bg='#1a1a1a')
+    content.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+    tk.Label(content, text="🎬 Manage Movies", font=('Arial', 24, 'bold'), bg='#1a1a1a', fg='white').pack(pady=(10, 12))
+
+    controls = tk.Frame(content, bg='#1a1a1a'); controls.pack(fill=tk.X)
+    tk.Label(controls, text="Title:", bg='#1a1a1a', fg='white').pack(side=tk.LEFT)
+    title_var = tk.StringVar(); tk.Entry(controls, textvariable=title_var, width=28).pack(side=tk.LEFT, padx=6)
+    tk.Button(controls, text="Search", bg='#4CAF50', fg='white', command=lambda: load_list()).pack(side=tk.LEFT)
+
+    list_holder = tk.Frame(content, bg='#1a1a1a'); list_holder.pack(fill=tk.BOTH, expand=True, pady=10)
+
+    def load_list():
+        for w in list_holder.winfo_children():
+            w.destroy()
+        query = "SELECT movie_id, title, average_rating FROM movies"
+        params = []
+        if title_var.get().strip():
+            query += " WHERE title LIKE ?"; params.append(f"%{title_var.get().strip()}%")
+        rows = db.execute_query(query, tuple(params) if params else None, fetch_all=True)
+        if not rows:
+            tk.Label(list_holder, text="No movies found", bg='#1a1a1a', fg='#888', font=('Arial', 12)).pack(pady=20)
+            return
+        table = tk.Frame(list_holder, bg='#1a1a1a'); table.pack(fill=tk.BOTH, expand=True)
+        header_bg = '#333'
+        cols = ["Title", "Avg Rating", "Actions"]
+        header = tk.Frame(table, bg=header_bg); header.grid(row=0, column=0, columnspan=3, sticky='ew')
+        for i, c in enumerate(cols):
+            tk.Label(header, text=c, font=('Arial', 11, 'bold'), bg=header_bg, fg='white', padx=10, pady=8).grid(row=0, column=i, sticky='w')
+            header.grid_columnconfigure(i, weight=1)
+        for r, m in enumerate(rows, start=1):
+            rowf = tk.Frame(table, bg='#2a2a2a'); rowf.grid(row=r, column=0, sticky='ew', pady=2)
+            for i in range(3): rowf.grid_columnconfigure(i, weight=1)
+            tk.Label(rowf, text=m['title'], bg='#2a2a2a', fg='white', font=('Arial', 10), padx=10, pady=6, anchor='w').grid(row=0, column=0, sticky='ew')
+            tk.Label(rowf, text=str(m.get('average_rating') or 0), bg='#2a2a2a', fg='#ccc', font=('Arial', 10), padx=10, pady=6, anchor='w').grid(row=0, column=1, sticky='ew')
+            actions = tk.Frame(rowf, bg='#2a2a2a'); actions.grid(row=0, column=2, sticky='e', padx=8)
+            tk.Button(actions, text="Delete Movie", bg='#d32f2f', fg='white', command=lambda mid=m['movie_id']: app.admin_delete_movie(mid)).pack(side=tk.LEFT, padx=4)
+    load_list()
